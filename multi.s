@@ -1,13 +1,13 @@
 section .rodata
-    format_hex_first: db "%hhx", 0     ; Format for the most significant byte (NO leading zero)
-    format_hex_rest: db "%02hhx", 0    ; Format for the rest of the bytes (WITH leading zero)
+    format_hex_first: db "%hhx", 0     ; msb format
+    format_hex_rest: db "%02hhx", 0    ; rest format
     format_newline: db 10, 0       
 
 section .data
-    ; 16-bit state for LFSR initialized to a non-zero seed
+    ; lfsr seed
     STATE: dw 0xACE1        
 
-    ; Default structs for Part 4 testing
+    ; default structs
     x_struct: db 5
     x_num: db 0xaa, 1, 2, 0x44, 0x4f
     
@@ -15,7 +15,7 @@ section .data
     y_num: db 0xaa, 1, 2, 3, 0x44, 0x4f
 
 section .bss
-    ; Reserve 500 bytes for our input buffer
+    ; 500b input buffer
     input_buffer: resb 500
 
 section .text
@@ -32,10 +32,7 @@ section .text
     extern stdin
     extern malloc
 
-; ---------------------------------------------------------
-; void print_multi(struct multi *p)
-; Prints a multi-precision integer in hexadecimal.
-; ---------------------------------------------------------
+; print multi in hex
 print_multi:
     push ebp
     mov ebp, esp
@@ -46,21 +43,21 @@ print_multi:
     xor eax, eax          
     mov al, byte [ebx]    
     mov esi, eax          
-    dec esi               ; esi = size - 1
+    dec esi               ; size - 1
 
     cmp esi, 0
-    jl .end_loop          ; If struct is completely empty, exit
+    jl .end_loop          ; exit if empty
 
-    ; --- 1. Print the Most Significant Byte (NO PADDING) ---
+    ; print msb
     xor eax, eax                    
     mov al, byte [ebx + 1 + esi]    
     push eax              
     push format_hex_first       
     call printf
     add esp, 8            
-    dec esi               ; Move to the next byte down
+    dec esi               ; next byte
 
-    ; --- 2. Print all Remaining Bytes (ZERO PADDED) ---
+    ; print rest
 .print_loop:
     cmp esi, 0
     jl .end_loop          
@@ -86,10 +83,7 @@ print_multi:
     pop ebp
     ret
 
-; ---------------------------------------------------------
-; struct multi* getmulti()
-; Reads a line of hex digits from stdin and returns a struct. 
-; ---------------------------------------------------------
+; read hex to struct
 getmulti:
     push ebp
     mov ebp, esp
@@ -179,9 +173,7 @@ getmulti:
     pop ebp
     ret
 
-; ---------------------------------------------------------
-; Helper Subroutine: char_to_hex
-; ---------------------------------------------------------
+; char to hex
 char_to_hex:
     cmp al, '9'
     jle .is_digit
@@ -197,11 +189,7 @@ char_to_hex:
     sub al, '0'
     ret
 
-; ---------------------------------------------------------
-; Part 2.A: get_max_min
-; Input:  eax = struct 1, ebx = struct 2
-; Output: eax = max struct, ebx = min struct
-; ---------------------------------------------------------
+; get max min structs
 get_max_min:
     push ecx
     push edx
@@ -220,10 +208,7 @@ get_max_min:
     pop ecx
     ret
 
-; ---------------------------------------------------------
-; Part 2.B: add_multi 
-; struct multi *add_multi(struct multi *p, struct multi *q)
-; ---------------------------------------------------------
+; add multi structs
 add_multi:
     push ebp
     mov ebp, esp
@@ -232,7 +217,7 @@ add_multi:
     push esi
     push edi
 
-    ; 1. Load arguments and find max/min
+    ; get args and max min
     mov eax, [ebp+8]       
     mov ebx, [ebp+12]      
     call get_max_min       
@@ -240,7 +225,7 @@ add_multi:
     mov [ebp-4], eax       
     mov [ebp-8], ebx       
 
-    ; 2. Extract sizes
+    ; get sizes
     xor ecx, ecx
     mov cl, byte [eax]
     mov [ebp-12], ecx      
@@ -249,7 +234,7 @@ add_multi:
     mov dl, byte [ebx]
     mov [ebp-16], edx      
 
-    ; 3. Allocate Memory for result (max_size + 2)
+    ; alloc result mem
     mov eax, [ebp-12]
     add eax, 2
     push eax
@@ -257,15 +242,15 @@ add_multi:
     add esp, 4
     mov edi, eax           
 
-    ; 4. Set initial result size
+    ; set res size
     mov ecx, [ebp-12]
     mov byte [edi], cl     
 
-    ; 5. Calculate remaining size
+    ; calc rem size
     sub ecx, [ebp-16]      
     mov [ebp-12], ecx      
 
-    ; 6. Prepare for Min Loop
+    ; prep min loop
     mov ecx, [ebp-16]      
     xor esi, esi           
     clc                    
@@ -304,7 +289,7 @@ add_multi:
 .check_carry:
     jnc .done              
     
-    ; Handle final carry overflow
+    ; handle carry
     mov byte [edi + 1 + esi], 1   
     inc byte [edi]                
 
@@ -318,12 +303,7 @@ add_multi:
     pop ebp
     ret
 
-; ---------------------------------------------------------
-; Part 3: rand_num
-; uint16_t rand_num()
-; Generates a pseudo-random number using a 16-bit LFSR.
-; Taps: 16, 14, 13, 11 (0-indexed: 15, 13, 12, 10)
-; ---------------------------------------------------------
+; 16-bit lfsr rand
 rand_num:
     push ebp
     mov ebp, esp
@@ -331,42 +311,42 @@ rand_num:
     push ecx
 
     xor eax, eax
-    mov ax, word [STATE]      ; Load current state
+    mov ax, word [STATE]      ; load state
 
-    ; Extract bit 15 (16th bit)
+    ; get bit 15
     mov ebx, eax
     shr ebx, 15
     and ebx, 1
 
-    ; Extract bit 13 (14th bit)
+    ; get bit 13
     mov ecx, eax
     shr ecx, 13
     and ecx, 1
-    xor ebx, ecx              ; XOR with previous
+    xor ebx, ecx              ; xor prev
 
-    ; Extract bit 12 (13th bit)
+    ; get bit 12
     mov ecx, eax
     shr ecx, 12
     and ecx, 1
-    xor ebx, ecx              ; XOR with previous
+    xor ebx, ecx              ; xor prev
 
-    ; Extract bit 10 (11th bit)
+    ; get bit 10
     mov ecx, eax
     shr ecx, 10
     and ecx, 1
-    xor ebx, ecx              ; XOR with previous
+    xor ebx, ecx              ; xor prev
 
-    ; ebx now holds the newly calculated input bit
-    ; Shift state left by 1 to make room
+    ; new bit in ebx
+    ; shift state left
     shl eax, 1
 
-    ; Put the new input bit into the LSB (bit 0)
+    ; bit 0 to lsb
     or eax, ebx
 
-    ; Update the global STATE
+    ; update state
     mov word [STATE], ax
     
-    ; Clear upper 16 bits of eax just to be clean
+    ; clear upper eax
     and eax, 0xFFFF
 
     pop ecx
@@ -375,12 +355,7 @@ rand_num:
     pop ebp
     ret
 
-; ---------------------------------------------------------
-; Part 3: PRmulti
-; struct multi* PRmulti()
-; Generates a multi-precision integer of pseudo-random length 
-; (1-16 bytes), filled completely with random bytes!
-; ---------------------------------------------------------
+; gen rand multi
 PRmulti:
     push ebp
     mov ebp, esp
@@ -388,38 +363,38 @@ PRmulti:
     push esi
     push edi
 
-    ; 1. Generate random length (mask to 0-15, then +1 = 1 to 16 bytes)
+    ; gen rand len
     call rand_num
     and eax, 0x0F           
     inc eax                 
-    mov ebx, eax            ; Save size in callee-saved register ebx
+    mov ebx, eax            ; save size in ebx
 
-    ; 2. Allocate memory: size + 1 bytes
+    ; alloc mem
     mov eax, ebx
     inc eax                 
     push eax
     call malloc
     add esp, 4
-    mov edi, eax            ; Save struct pointer in callee-saved register edi
+    mov edi, eax            ; save ptr in edi
 
-    ; 3. Set the size byte
+    ; set size byte
     mov byte [edi], bl
 
-    ; 4. Fill the array with random bytes
-    xor esi, esi            ; esi = loop index 
+    ; fill rand bytes
+    xor esi, esi            ; loop idx
 .pr_loop:
     cmp esi, ebx
     jge .pr_done
 
-    call rand_num           ; eax = random 16-bit number
-    ; We take the lowest 8 bits (al) to fill our struct byte
+    call rand_num           ; rand 16 bit
+    ; fill with al
     mov byte [edi + 1 + esi], al
 
     inc esi
     jmp .pr_loop
 
 .pr_done:
-    mov eax, edi            ; Return the dynamically allocated pointer
+    mov eax, edi            ; ret ptr
 
     pop edi
     pop esi
@@ -428,10 +403,7 @@ PRmulti:
     pop ebp
     ret
 
-; ---------------------------------------------------------
-; Part 4: main
-; Entry point orchestrating Part 4 command line switches.
-; ---------------------------------------------------------
+; main entry
 main:
     push ebp
     mov ebp, esp
@@ -439,80 +411,80 @@ main:
     push esi               
     push edi
 
-    ; Get argc and argv passed to main
-    mov ecx, [ebp+8]        ; ecx = argc
-    mov edx, [ebp+12]       ; edx = argv
+    ; get argc argv
+    mov ecx, [ebp+8]        ; argc
+    mov edx, [ebp+12]       ; argv
 
-    ; Check if no arguments were provided (argc == 1)
+    ; check no args
     cmp ecx, 1
     jle .default_mode
 
-    ; Load argv[1] pointer into eax
+    ; argv[1] to eax
     mov eax, [edx+4]
     
-    ; Check if argv[1] starts with '-'
+    ; check flag dash
     cmp byte [eax], '-'
     jne .default_mode
     
-    ; Check the character following '-'
+    ; check flag char
     cmp byte [eax+1], 'I'
     je .input_mode
     
     cmp byte [eax+1], 'R'
     je .random_mode
     
-    ; If flag unrecognized, fall back to default
+    ; fallback to default
     jmp .default_mode
 
 .default_mode:
-    ; Use pre-initialized structs (x_struct, y_struct)
+    ; use default structs
     mov esi, x_struct
     mov edi, y_struct
     jmp .do_add
 
 .input_mode:
-    ; Read first number from stdin
+    ; read first stdin
     call getmulti
-    mov esi, eax            ; esi = struct 1
+    mov esi, eax            ; struct 1
     
-    ; Read second number from stdin
+    ; read second stdin
     call getmulti
-    mov edi, eax            ; edi = struct 2
+    mov edi, eax            ; struct 2
     jmp .do_add
 
 .random_mode:
-    ; Generate first random number
+    ; gen first rand
     call PRmulti
-    mov esi, eax            ; esi = struct 1
+    mov esi, eax            ; struct 1
     
-    ; Generate second random number
+    ; gen sec rand
     call PRmulti
-    mov edi, eax            ; edi = struct 2
+    mov edi, eax            ; struct 2
     jmp .do_add
 
 .do_add:
-    ; Print the first number
+    ; print first
     push esi
     call print_multi
     add esp, 4
 
-    ; Print the second number
+    ; print second
     push edi
     call print_multi
     add esp, 4
 
-    ; Add the numbers (pass q then p)
+    ; add nums
     push edi
     push esi
     call add_multi
     add esp, 8
 
-    ; Print the addition result
+    ; print result
     push eax
     call print_multi
     add esp, 4
 
-    ; Return 0 and exit gracefully
+    ; exit 0
     mov eax, 0
 
     pop edi
