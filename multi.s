@@ -2,18 +2,17 @@ section .rodata
     format_hex_first: db "%hhx", 0     ; Format for the most significant byte (NO leading zero)
     format_hex_rest: db "%02hhx", 0    ; Format for the rest of the bytes (WITH leading zero)
     format_newline: db 10, 0       
-    prompt1: db "Enter first hex string: ", 0
-    prompt2: db "Enter second hex string: ", 0
-    
-    ; Descriptive markers for the console output
-    msg_part2: db 10, "--- Part 2: Add Multi ---", 10, 0
-    msg_part3: db 10, "--- Part 3: PRNG ---", 10, 0
-    result_msg: db "Addition Result: ", 0
-    prng_msg: db "Randomly Generated Multi: ", 0
 
 section .data
     ; 16-bit state for LFSR initialized to a non-zero seed
     STATE: dw 0xACE1        
+
+    ; Default structs for Part 4 testing
+    x_struct: db 5
+    x_num: db 0xaa, 1, 2, 0x44, 0x4f
+    
+    y_struct: db 6
+    y_num: db 0xaa, 1, 2, 3, 0x44, 0x4f
 
 section .bss
     ; Reserve 500 bytes for our input buffer
@@ -27,6 +26,7 @@ section .text
     global add_multi
     global rand_num
     global PRmulti
+    
     extern printf
     extern fgets
     extern stdin
@@ -429,68 +429,93 @@ PRmulti:
     ret
 
 ; ---------------------------------------------------------
-; main
-; Entry point to test reading, adding, and PRNG multis
+; Part 4: main
+; Entry point orchestrating Part 4 command line switches.
 ; ---------------------------------------------------------
 main:
     push ebp
     mov ebp, esp
     push ebx               
     push esi               
+    push edi
 
-    ; --- PART 2: ADD MULTI TEST ---
-    push msg_part2
-    call printf
-    add esp, 4
+    ; Get argc and argv passed to main
+    mov ecx, [ebp+8]        ; ecx = argc
+    mov edx, [ebp+12]       ; edx = argv
 
-    ; Read first number
-    push prompt1
-    call printf
-    add esp, 4
+    ; Check if no arguments were provided (argc == 1)
+    cmp ecx, 1
+    jle .default_mode
+
+    ; Load argv[1] pointer into eax
+    mov eax, [edx+4]
+    
+    ; Check if argv[1] starts with '-'
+    cmp byte [eax], '-'
+    jne .default_mode
+    
+    ; Check the character following '-'
+    cmp byte [eax+1], 'I'
+    je .input_mode
+    
+    cmp byte [eax+1], 'R'
+    je .random_mode
+    
+    ; If flag unrecognized, fall back to default
+    jmp .default_mode
+
+.default_mode:
+    ; Use pre-initialized structs (x_struct, y_struct)
+    mov esi, x_struct
+    mov edi, y_struct
+    jmp .do_add
+
+.input_mode:
+    ; Read first number from stdin
     call getmulti
-    mov ebx, eax           
-
-    ; Read second number
-    push prompt2
-    call printf
-    add esp, 4
+    mov esi, eax            ; esi = struct 1
+    
+    ; Read second number from stdin
     call getmulti
-    mov esi, eax           
+    mov edi, eax            ; edi = struct 2
+    jmp .do_add
 
-    ; Add them 
-    push esi               
-    push ebx               
-    call add_multi
-    add esp, 8             
-
-    ; Save and print addition result
-    mov ebx, eax           
-    push result_msg
-    call printf
-    add esp, 4
-    push ebx
-    call print_multi
-    add esp, 4
-
-    ; --- PART 3: PRNG TEST ---
-    push msg_part3
-    call printf
-    add esp, 4
-
-    ; Generate Random Multi
+.random_mode:
+    ; Generate first random number
     call PRmulti
-    mov ebx, eax           ; Save PRmulti result pointer
+    mov esi, eax            ; esi = struct 1
+    
+    ; Generate second random number
+    call PRmulti
+    mov edi, eax            ; edi = struct 2
+    jmp .do_add
 
-    ; Print Random Multi
-    push prng_msg
-    call printf
-    add esp, 4
-    push ebx
+.do_add:
+    ; Print the first number
+    push esi
     call print_multi
     add esp, 4
 
-    ; Return 0
+    ; Print the second number
+    push edi
+    call print_multi
+    add esp, 4
+
+    ; Add the numbers (pass q then p)
+    push edi
+    push esi
+    call add_multi
+    add esp, 8
+
+    ; Print the addition result
+    push eax
+    call print_multi
+    add esp, 4
+
+    ; Return 0 and exit gracefully
     mov eax, 0
+
+    pop edi
     pop esi
     pop ebx
     mov esp, ebp
