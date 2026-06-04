@@ -2,6 +2,7 @@ section .rodata
     format_hex_first: db "%hhx", 0     ; msb format
     format_hex_rest: db "%02hhx", 0    ; rest format
     format_newline: db 10, 0       
+    MASK: dw 0xB400                    ; lfsr taps mask
 
 section .data
     ; lfsr seed
@@ -303,44 +304,36 @@ add_multi:
     pop ebp
     ret
 
-; 16-bit lfsr rand
+; 16-bit lfsr rand using parity flag
 rand_num:
     push ebp
     mov ebp, esp
     push ebx
     push ecx
+    push edx
 
     xor eax, eax
     mov ax, word [STATE]      ; load state
 
-    ; get bit 15
-    mov ebx, eax
-    shr ebx, 15
-    and ebx, 1
+    ; apply mask
+    mov bx, ax
+    and bx, word [MASK]       ; isolate tap bits
 
-    ; get bit 13
-    mov ecx, eax
-    shr ecx, 13
-    and ecx, 1
-    xor ebx, ecx              ; xor prev
+    ; compute parity using pf
+    mov cl, bh
+    xor cl, bl                ; xor high and low byte
 
-    ; get bit 12
-    mov ecx, eax
-    shr ecx, 12
-    and ecx, 1
-    xor ebx, ecx              ; xor prev
+    setpo dl                  ; set dl=1 if odd parity
+    
+    ; REPLACED movzx ebx, dl
+    xor ebx, ebx              ; clear ebx
+    mov bl, dl                ; new msb bit
 
-    ; get bit 10
-    mov ecx, eax
-    shr ecx, 10
-    and ecx, 1
-    xor ebx, ecx              ; xor prev
+    ; shift state right
+    shr eax, 1
 
-    ; new bit in ebx
-    ; shift state left
-    shl eax, 1
-
-    ; bit 0 to lsb
+    ; msb to bit 15
+    shl ebx, 15
     or eax, ebx
 
     ; update state
@@ -349,6 +342,7 @@ rand_num:
     ; clear upper eax
     and eax, 0xFFFF
 
+    pop edx
     pop ecx
     pop ebx
     mov esp, ebp
@@ -363,11 +357,15 @@ PRmulti:
     push esi
     push edi
 
-    ; gen rand len
+.get_len:
     call rand_num
-    and eax, 0x0F           
-    inc eax                 
-    mov ebx, eax            ; save size in ebx
+    
+    ; REPLACED movzx ebx, al
+    xor ebx, ebx            ; clear ebx
+    mov bl, al              ; len 1-255
+    
+    test ebx, ebx
+    jz .get_len             ; retry if 0
 
     ; alloc mem
     mov eax, ebx
@@ -375,7 +373,7 @@ PRmulti:
     push eax
     call malloc
     add esp, 4
-    mov edi, eax            ; save ptr in edi
+    mov edi, eax            ; save ptr
 
     ; set size byte
     mov byte [edi], bl
@@ -387,8 +385,7 @@ PRmulti:
     jge .pr_done
 
     call rand_num           ; rand 16 bit
-    ; fill with al
-    mov byte [edi + 1 + esi], al
+    mov byte [edi + 1 + esi], al ; fill with al
 
     inc esi
     jmp .pr_loop
