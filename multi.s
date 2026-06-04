@@ -1,59 +1,84 @@
 section .rodata
-    ; Format string for printing argc as a decimal integer with a newline
-    format_argc: db "%d", 10, 0 
+    format_hex: db "%02hhx", 0     ; Format string for printing a single hex byte
+    format_newline: db 10, 0       ; Newline character 
+
+section .data
+    ; Test struct initialized as per the assignment instructions
+    x_struct: db 5
+    x_num: db 0xaa, 0x01, 0x02, 0x44, 0x4f
 
 section .text
-    global main       ; Global label for the entry point 
-    extern printf     ; External reference to stdlib printf 
-    extern puts       ; External reference to stdlib puts 
+    global main
+    global print_multi
+    extern printf
 
-main:
-    ; Function Prologue: Setup stack frame and preserve registers
+; ---------------------------------------------------------
+; void print_multi(struct multi *p)
+; Prints a multi-precision integer in hexadecimal.
+; ---------------------------------------------------------
+print_multi:
+    ; Function Prologue
     push ebp
     mov ebp, esp
-    push ebx          
-    push esi          
-    push edi          
+    push ebx          ; Callee-saved: we will use this for the struct pointer
+    push esi          ; Callee-saved: we will use this for the loop index
 
-    ; In CDECL, arguments are passed on the stack above the return address
-    ; [ebp+8]  = argc
-    ; [ebp+12] = argv (pointer to an array of string pointers)
+    mov ebx, [ebp+8]      ; ebx = pointer to struct multi p
     
-    mov esi, [ebp+8]  ; Store argc in esi for safe-keeping
-    mov ebx, [ebp+12] ; Store argv in ebx for safe-keeping
+    ; Read the size byte (without movzx)
+    xor eax, eax          ; Clear eax (eax = 0) so the upper 24 bits are clean
+    mov al, byte [ebx]    ; Move the 8-bit size into the lowest 8 bits of eax
+    mov esi, eax          ; Transfer the clean 32-bit value into esi
 
-    ; Print argc using printf 
-    push esi          ; Push argc (second argument to printf)
-    push format_argc  ; Push format string (first argument to printf)
-    call printf
-    add esp, 8        ; CDECL requires the caller to clean up the stack (2 args * 4 bytes)
-
-    ; Setup loop to print argv[i] from 0 to argc-1
-    xor edi, edi      ; Initialize loop counter i = 0 (stored in edi)
+    ; Because the number is little-endian, we print from the most significant byte 
+    ; to the least significant byte. We start at index (size - 1).
+    dec esi               ; esi = size - 1
 
 .print_loop:
-    cmp edi, esi      ; Compare i (edi) with argc (esi)
-    jge .end_loop     ; If i >= argc, jump to the end of the loop
+    cmp esi, 0
+    jl .end_loop          ; If index < 0, we have printed all bytes
 
-    ; Calculate the address of argv[i] -> argv base address + (i * 4 bytes)
-    mov eax, [ebx + edi*4] 
-    
-    ; Print argv[i] using puts 
-    push eax          ; Push the string pointer
-    call puts
-    add esp, 4        ; Clean up stack (1 arg * 4 bytes)
+    ; Calculate address of p->num[esi] and load it (without movzx):
+    xor eax, eax                    ; Clear eax completely
+    mov al, byte [ebx + 1 + esi]    ; Load the current data byte into al
 
-    inc edi           ; i++
-    jmp .print_loop   ; Jump back to the start of the loop
+    ; Call printf("%02hhx", value)
+    push eax              ; Push the zero-extended byte value
+    push format_hex       ; Push the format string
+    call printf
+    add esp, 8            ; Clean up stack (2 args * 4 bytes)
+
+    dec esi               ; Decrement index
+    jmp .print_loop
 
 .end_loop:
-    ; Function Epilogue: Restore preserved registers and stack frame
-    pop edi
+    ; Print a linefeed at the end
+    push format_newline
+    call printf
+    add esp, 4
+
+    ; Function Epilogue
     pop esi
     pop ebx
     mov esp, ebp
     pop ebp
-    
-    ; Return 0 to indicate successful execution
+    ret
+
+; ---------------------------------------------------------
+; main
+; Entry point to test print_multi
+; ---------------------------------------------------------
+main:
+    push ebp
+    mov ebp, esp
+
+    ; Call print_multi passing the address of x_struct
+    push x_struct
+    call print_multi
+    add esp, 4            ; Clean up stack
+
+    ; Return 0
     mov eax, 0
+    mov esp, ebp
+    pop ebp
     ret
